@@ -1,0 +1,39 @@
+# Data files (large)
+*.pkl
+*.png
+*.jpg
+*.jpeg
+
+# Output folder (generated files)
+output/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Logs
+*.log
+
+# CSV results (large)
+*.csv
