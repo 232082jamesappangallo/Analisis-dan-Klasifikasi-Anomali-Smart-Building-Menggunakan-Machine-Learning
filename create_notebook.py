@@ -1,0 +1,234 @@
+import json
+
+notebook = {
+    "cells": [
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": ["# Smart Building Dataset - ML Classification Pipeline\n", "## Anomaly Detection / Fault Classification\n", "### Dataset: normal_training, normal_testing, faulty_training, faulty_testing"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["import pandas as pd\n", "import numpy as np\n", "import warnings\n", "warnings.filterwarnings('ignore')\n", "print('✅ Data libraries loaded')"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["import matplotlib.pyplot as plt\n", "import seaborn as sns\n", "%matplotlib inline\n", "sns.set_style('whitegrid')\n", "print('✅ Visualization libraries loaded')"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["from sklearn.preprocessing import StandardScaler\n", "from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV, StratifiedKFold\n", "from sklearn.linear_model import LogisticRegression\n", "from sklearn.neighbors import KNeighborsClassifier\n", "from sklearn.tree import DecisionTreeClassifier\n", "from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier\n", "from sklearn.svm import SVC\n", "from sklearn.naive_bayes import GaussianNB\n", "from xgboost import XGBClassifier\n", "from lightgbm import LGBMClassifier\n", "from imblearn.over_sampling import SMOTE\n", "print('✅ ML libraries loaded')"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, classification_report, roc_auc_score, roc_curve\n", "import joblib\n", "from datetime import datetime\n", "print('✅ Evaluation libraries loaded')"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["RANDOM_STATE = 42\n", "TEST_SIZE = 0.2\n", "CV_FOLDS = 5\n", "TARGET_ACCURACY = 0.90\n", "plt.rcParams['figure.figsize'] = (14, 6)\n", "print(f'✅ Configuration set - Target: {TARGET_ACCURACY*100}%')"]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": ["## 1. LOAD & EXPLORE DATASET"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["df_normal_train = pd.read_csv('data/normal_training.csv')\n", "df_faulty_train = pd.read_csv('data/faulty_training.csv')\n", "df_normal_test = pd.read_csv('data/normal_testing.csv')\n", "df_faulty_test = pd.read_csv('data/faulty_testing.csv')\n", "\n", "df_normal_train['label'] = 0\n", "df_faulty_train['label'] = 1\n", "df_normal_test['label'] = 0\n", "df_faulty_test['label'] = 1\n", "\n", "df_train = pd.concat([df_normal_train, df_faulty_train], ignore_index=True)\n", "df_test = pd.concat([df_normal_test, df_faulty_test], ignore_index=True)\n", "\n", "print(f'✅ Dataset loaded - Train: {len(df_train)}, Test: {len(df_test)}')"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["print(df_train.head())\n", "print(f'\\nShape: {df_train.shape}')\n", "print(f'Columns: {df_train.columns.tolist()}')"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["print('Dataset Info:')\n", "df_train.info()\n", "print(f'\\nMissing: {df_train.isnull().sum().sum()}')\n", "print(f'Duplicates: {df_train.duplicated().sum()}')"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["print('Statistical Summary:')\n", "print(df_train.describe())"]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": ["## 2. DATA ANALYSIS"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["class_counts = df_train['label'].value_counts()\n", "print(f'Class Distribution:')\n", "print(f'  Normal: {class_counts[0]} ({class_counts[0]/len(df_train)*100:.1f}%)')\n", "print(f'  Faulty: {class_counts[1]} ({class_counts[1]/len(df_train)*100:.1f}%)')\n", "\n", "fig, ax = plt.subplots(figsize=(8, 5))\n", "class_counts.plot(kind='bar', ax=ax, color=['green', 'red'])\n", "ax.set_title('Class Distribution')\n", "ax.set_ylabel('Count')\n", "plt.tight_layout()\n", "plt.savefig('output/class_distribution.png', dpi=300, bbox_inches='tight')\n", "plt.show()\n", "\n", "ratio = class_counts[1] / class_counts[0]\n", "print(f'\\nImbalance ratio: {1/ratio:.2f}:1 - SMOTE will be applied')"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["features = [col for col in df_train.columns if col != 'label']\n", "fig, axes = plt.subplots(2, 3, figsize=(15, 8))\n", "for idx, feature in enumerate(features[:6]):\n", "    ax = axes[idx // 3, idx % 3]\n", "    df_train[feature].hist(bins=30, ax=ax, alpha=0.7)\n", "    ax.set_title(f'{feature} Distribution')\n", "plt.tight_layout()\n", "plt.savefig('output/feature_distributions.png', dpi=300, bbox_inches='tight')\n", "plt.show()"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["correlation = df_train.corr()\n", "plt.figure(figsize=(12, 10))\n", "sns.heatmap(correlation, annot=False, cmap='coolwarm', center=0)\n", "plt.title('Feature Correlation Matrix')\n", "plt.tight_layout()\n", "plt.savefig('output/correlation_matrix.png', dpi=300, bbox_inches='tight')\n", "plt.show()"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["for feature in features[:3]:\n", "    Q1 = df_train[feature].quantile(0.25)\n", "    Q3 = df_train[feature].quantile(0.75)\n", "    IQR = Q3 - Q1\n", "    outliers = df_train[(df_train[feature] < Q1 - 1.5*IQR) | (df_train[feature] > Q3 + 1.5*IQR)]\n", "    print(f'{feature}: {len(outliers)} outliers ({len(outliers)/len(df_train)*100:.2f}%)')"]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": ["## 3. PREPROCESSING"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["y_train = df_train['label'].values\n", "y_test = df_test['label'].values\n", "X_train = df_train.drop('label', axis=1).values\n", "X_test = df_test.drop('label', axis=1).values\n", "feature_names = df_train.drop('label', axis=1).columns.tolist()\n", "\n", "print(f'✅ Data prepared - Features: {X_train.shape[1]}, Train: {len(X_train)}, Test: {len(X_test)}')"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["scaler = StandardScaler()\n", "X_train_scaled = scaler.fit_transform(X_train)\n", "X_test_scaled = scaler.transform(X_test)\n", "\n", "print(f'✅ Scaling complete (fit on training only - NO DATA LEAKAGE)')\n", "print(f'Train mean ≈ 0: {X_train_scaled.mean(axis=0)[:3]}')\n", "print(f'Train std ≈ 1: {X_train_scaled.std(axis=0)[:3]}')"]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": ["## 4. SMOTE HANDLING"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["smote = SMOTE(random_state=RANDOM_STATE, n_jobs=-1)\n", "X_train_balanced, y_train_balanced = smote.fit_resample(X_train_scaled, y_train)\n", "\n", "print(f'Original: {len(y_train)} samples')\n", "print(f'After SMOTE: {len(y_train_balanced)} samples')\n", "print(f'Ratio: {(y_train_balanced == 1).sum() / (y_train_balanced == 0).sum():.3f}')\n", "\n", "fig, ax = plt.subplots(1, 2, figsize=(12, 4))\n", "pd.Series(y_train).value_counts().plot(kind='bar', ax=ax[0], color=['green', 'red'])\n", "ax[0].set_title('Before SMOTE')\n", "pd.Series(y_train_balanced).value_counts().plot(kind='bar', ax=ax[1], color=['green', 'red'])\n", "ax[1].set_title('After SMOTE')\n", "plt.tight_layout()\n", "plt.savefig('output/smote_balance.png', dpi=300, bbox_inches='tight')\n", "plt.show()\n", "print('✅ SMOTE applied')"]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": ["## 5. TRAIN MODELS (9 Algorithms)"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["models = {\n", "    'Logistic Regression': LogisticRegression(max_iter=1000, random_state=RANDOM_STATE),\n", "    'KNN': KNeighborsClassifier(n_neighbors=5),\n", "    'Decision Tree': DecisionTreeClassifier(random_state=RANDOM_STATE),\n", "    'Random Forest': RandomForestClassifier(n_estimators=100, random_state=RANDOM_STATE, n_jobs=-1),\n", "    'Gradient Boosting': GradientBoostingClassifier(random_state=RANDOM_STATE),\n", "    'XGBoost': XGBClassifier(random_state=RANDOM_STATE, n_jobs=-1, verbosity=0),\n", "    'LightGBM': LGBMClassifier(random_state=RANDOM_STATE, n_jobs=-1, verbose=-1),\n", "    'SVM': SVC(kernel='rbf', random_state=RANDOM_STATE, probability=True),\n", "    'Naive Bayes': GaussianNB()\n", "}\n", "\n", "print('✅ 9 models initialized')\n", "trained_models = {}\n", "for name, model in models.items():\n", "    model.fit(X_train_balanced, y_train_balanced)\n", "    trained_models[name] = model\n", "    print(f'  ✅ {name} trained')\n", "\n", "print(f'\\n✅ All models trained')"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["predictions = {}\n", "probabilities = {}\n", "\n", "for name, model in trained_models.items():\n", "    y_pred = model.predict(X_test_scaled)\n", "    predictions[name] = y_pred\n", "    if hasattr(model, 'predict_proba'):\n", "        probabilities[name] = model.predict_proba(X_test_scaled)[:, 1]\n", "    else:\n", "        probabilities[name] = model.decision_function(X_test_scaled) if hasattr(model, 'decision_function') else y_pred\n", "\n", "print(f'✅ Predictions made for all models')"]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": ["## 6. MODEL EVALUATION"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["results = []\n", "for name in models.keys():\n", "    y_pred = predictions[name]\n", "    acc = accuracy_score(y_test, y_pred)\n", "    prec = precision_score(y_test, y_pred, zero_division=0)\n", "    rec = recall_score(y_test, y_pred, zero_division=0)\n", "    f1 = f1_score(y_test, y_pred, zero_division=0)\n", "    try:\n", "        roc = roc_auc_score(y_test, probabilities[name])\n", "    except:\n", "        roc = 0\n", "    results.append({'Model': name, 'Accuracy': acc, 'Precision': prec, 'Recall': rec, 'F1': f1, 'ROC-AUC': roc})\n", "\n", "results_df = pd.DataFrame(results).sort_values('Accuracy', ascending=False)\n", "print('\\n=== MODEL COMPARISON ===')\n", "print(results_df.to_string(index=False))\n", "results_df.to_csv('output/model_results.csv', index=False)\n", "print('\\n✅ Results saved')"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["fig, axes = plt.subplots(2, 3, figsize=(16, 8))\n", "for idx, metric in enumerate(['Accuracy', 'Precision', 'Recall', 'F1', 'ROC-AUC']):\n", "    ax = axes[idx // 3, idx % 3]\n", "    ax.barh(results_df['Model'], results_df[metric], color=plt.cm.Set3(range(len(results_df))))\n", "    ax.set_xlabel(metric)\n", "    ax.axvline(TARGET_ACCURACY, color='red', linestyle='--', linewidth=2, label='Target')\n", "    ax.set_xlim(0, 1.05)\n", "    ax.legend()\n", "\n", "axes[1, 2].axis('off')\n", "plt.tight_layout()\n", "plt.savefig('output/metrics_comparison.png', dpi=300, bbox_inches='tight')\n", "plt.show()\n", "print('✅ Metrics visualized')"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["best_model_name = results_df.iloc[0]['Model']\n", "best_accuracy = results_df.iloc[0]['Accuracy']\n", "print(f'\\n⭐ BEST MODEL: {best_model_name}')\n", "print(f'\\nAccuracy: {best_accuracy:.4f} ({best_accuracy*100:.2f}%)')\n", "if best_accuracy >= TARGET_ACCURACY:\n", "    print(f'✅ TARGET ACHIEVED! ({best_accuracy*100:.2f}% >= {TARGET_ACCURACY*100}%)')\n", "else:\n", "    print(f'⚠️ Below target. Gap: {(TARGET_ACCURACY - best_accuracy)*100:.2f}%')"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["top_models = results_df.head(3)['Model'].tolist()\n", "fig, axes = plt.subplots(1, 3, figsize=(15, 4))\n", "\n", "for idx, model_name in enumerate(top_models):\n", "    y_pred = predictions[model_name]\n", "    cm = confusion_matrix(y_test, y_pred)\n", "    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=axes[idx], cbar=False)\n", "    acc = accuracy_score(y_test, y_pred)\n", "    axes[idx].set_title(f'{model_name}\\n{acc:.4f}')\n", "    axes[idx].set_xlabel('Predicted')\n", "    axes[idx].set_ylabel('Actual')\n", "\n", "plt.tight_layout()\n", "plt.savefig('output/confusion_matrices.png', dpi=300, bbox_inches='tight')\n", "plt.show()\n", "print('✅ Confusion matrices displayed')"]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": ["## 7. CONCLUSION"]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": ["print('='*60)\n", "print('FINAL RESULTS SUMMARY')\n", "print('='*60)\n", "print(f'\\nBest Model: {best_model_name}')\n", "print(f'Accuracy: {best_accuracy:.4f} ({best_accuracy*100:.2f}%)')\n", "print(f'Target: {TARGET_ACCURACY*100}%')\n", "print(f'Status: {\"✅ TARGET ACHIEVED\" if best_accuracy >= TARGET_ACCURACY else \"⚠️ Below Target\"}')\n", "print(f'\\nTop 3 Models:')\n", "for i, row in results_df.head(3).iterrows():\n", "    print(f'  {row[\"Model\"]}: {row[\"Accuracy\"]:.4f}')\n", "\n", "if best_accuracy < TARGET_ACCURACY:\n", "    gap = (TARGET_ACCURACY - best_accuracy) * 100\n", "    print(f'\\nGap to Target: {gap:.2f}%')\n", "    print(f'\\nRecommendations for Improvement:')\n", "    print(f'1. Collect more data (especially minority class)')\n", "    print(f'2. Try ensemble methods or stacking')\n", "    print(f'3. Engineer additional features')\n", "    print(f'4. Perform more aggressive hyperparameter tuning')\n", "    print(f'5. Experiment with different scaling/preprocessing')\n", "else:\n", "    print(f'\\n✅ SUCCESS! Model achieved {best_accuracy*100:.2f}% accuracy')\n", "    print(f'\\nNext Steps:')\n", "    print(f'1. Deploy model to production')\n", "    print(f'2. Monitor performance on new data')\n", "    print(f'3. Retrain periodically with new samples')\n", "\n", "print('\\n' + '='*60)\n", "print(f'Pipeline completed at: {datetime.now().strftime(\"%Y-%m-%d %H:%M:%S\")}')\n", "print('='*60)"]
+        }
+    ],
+    "metadata": {
+        "kernelspec": {
+            "display_name": "Python 3",
+            "language": "python",
+            "name": "python3"
+        },
+        "language_info": {
+            "codemirror_mode": {
+                "name": "ipython",
+                "version": 3
+            },
+            "file_extension": ".py",
+            "mimetype": "text/x-python",
+            "name": "python",
+            "nbconvert_exporter": "python",
+            "pygments_lexer": "ipython3",
+            "version": "3.9.0"
+        }
+    },
+    "nbformat": 4,
+    "nbformat_minor": 4
+}
+
+# Save notebook
+with open('scripts/ML_Pipeline_Notebook.ipynb', 'w') as f:
+    json.dump(notebook, f, indent=2)
+
+print("✅ New notebook created")

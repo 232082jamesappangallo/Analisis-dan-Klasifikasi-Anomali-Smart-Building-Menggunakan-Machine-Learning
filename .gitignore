@@ -1,28 +1,25 @@
-# Data files (large)
-*.pkl
-*.png
-*.jpg
-*.jpeg
+# Don't ignore folders - only large files
+# Keep folder structure!
 
-# Output folder (generated files)
-output/
+# Ignore large data files (but keep folder)
+data/*.csv
 
-# Python
+# Ignore large output files (but keep folder)  
+output/*.pkl
+output/*.png
+output/*.json
+output/*.csv
+
+# Python cache
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
-env/
-venv/
-ENV/
 
 # IDE
 .vscode/
 .idea/
 *.swp
-*.swo
-*~
 
 # OS
 .DS_Store
@@ -34,6 +31,3 @@ Thumbs.db
 
 # Logs
 *.log
-
-# CSV results (large)
-*.csv
